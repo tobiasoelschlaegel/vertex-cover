@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include "graph.h"
 
-/*#define VC_SIMPLE_DEBUG*/
+//#define VC_SIMPLE_DEBUG
+//#define VC_MAXDEG_DEBUG
+
 /*
     gcc -o vc -Wall -O2 main.c graph.c stack.c bitset.c union_find.c -std=c99
  */
@@ -41,11 +43,14 @@ bool find_uncovered_edge(const subgraph_t const *subgraph, const subgraph_t cons
     return edge_found;
 }
 
-bool find_maxdeg_vertex(const subgraph_t const *subgraph, vertex_t *u, int *maxdeg)
+bool find_minmaxdeg_vertex(subgraph_t *subgraph, vertex_t *maxvert, int *maxdeg, vertex_t *minvert, int *mindeg)
 {
     vertex_t vertex;
     subgraph_iter_t iter_vertices, iter_neighborhood;
+
     *maxdeg = 0;
+    *mindeg = 0;
+
     subgraph_iter_all_vertices(subgraph, &iter_vertices);
     while(subgraph_iter_next(subgraph, &iter_vertices, &vertex))
     {
@@ -60,59 +65,139 @@ bool find_maxdeg_vertex(const subgraph_t const *subgraph, vertex_t *u, int *maxd
         if(deg > *maxdeg)
         {
             *maxdeg = deg;
-            *u = vertex;
+            *maxvert = vertex;
+        }
+        
+        if(deg == 0)
+            subgraph_remove_vertex(subgraph, vertex);
+        else if((*mindeg == 0) || (deg < *mindeg))
+        {
+            *mindeg = deg;
+            *minvert = vertex;
         }
     }
     subgraph_iter_destroy(&iter_vertices);
     return (*maxdeg > 0);
 }
 
-bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
+bool vc_tree_cycle(subgraph_t *subgraph, int k)
 {
-    vertex_t vertex;
-    int maxdeg;
+    vertex_t vertex, minvertex;
+    int maxdeg, mindeg;
     
-    if(find_maxdeg_vertex(subgraph, &vertex, &maxdeg))
+    while((k >= 0) && find_minmaxdeg_vertex(subgraph, &vertex, &maxdeg, &minvertex, &mindeg))
     {
-#ifdef VC_MAXDEG_DEBUG
-        fprintf(stdout, "[debug] found maximum degree vertex: %u\n", vertex);
-#endif
-        if(k > 0)
+        if(maxdeg == 1)
+            return (2 * k >= subgraph_num_vertices(subgraph));
+        else if(mindeg == 1)
         {
-            bool solution_found = false;
-            subgraph_t subcopy;
-            /* first branch: include the vertex in the vertex cover */
-            subgraph_init_copy(&subcopy, subgraph);
-            subgraph_remove_vertex(&subcopy, vertex);
+            /* add neighbor of 'minvertex' to the vc */
+            vertex_t neighbor;
+            subgraph_iter_t iter_neighborhood;
+
+            /* find any neighbor of 'minvertex' */
+            subgraph_iter_neighborhood(subgraph, &iter_neighborhood, minvertex);
+            subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor);
+            subgraph_iter_destroy(&iter_neighborhood);
             
-            solution_found = vc_maxdeg_recursive(&subcopy, k - 1);
-            if(!solution_found && (maxdeg <= k))
+            k--;
+            subgraph_remove_vertex(subgraph, minvertex);
+            subgraph_remove_vertex(subgraph, neighbor);
+        }
+        else
+        {
+            int cycle_length = 1;
+            bool cycle_removed = false;
+            /* 'vertex' belongs to a cycle, so find out its length */
+            
+            while(!cycle_removed)
             {
-                /* second branch: remove neighbors of the vertex */
-                subgraph_iter_t iter_neighborhood;
                 vertex_t neighbor;
-                
+                subgraph_iter_t iter_neighborhood;
+
+                /* find any neighbor of 'vertex' */
                 subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
-                while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+                if(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
                 {
-                    subgraph_remove_vertex(&subcopy, neighbor);
-                    k--;
+                    subgraph_remove_vertex(subgraph, vertex);
+                    cycle_length++;
+                    vertex = neighbor;
+                }
+                else
+                {
+                    /* 'vertex' does not have a neighbor */
+                    subgraph_remove_vertex(subgraph, vertex);
+                    cycle_removed = true;
                 }
 
                 subgraph_iter_destroy(&iter_neighborhood);
-                
-                solution_found = vc_maxdeg_recursive(&subcopy, k);
             }
-
-            subgraph_destroy(&subcopy);
             
-            return solution_found;
+            if(cycle_length % 2)
+                k = k - ((cycle_length + 1) / 2);
+            else
+                k = k - (cycle_length / 2);
         }
-        else
-            return false;
+    }
+    
+    return (k >= 0);
+}
+
+bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
+{
+    vertex_t vertex, minvertex;
+    int maxdeg, mindeg;
+    subgraph_t graph;
+    bool solution_found = false;
+    
+    subgraph_init_copy(&graph, subgraph);
+    
+    if(find_minmaxdeg_vertex(&graph, &vertex, &maxdeg, &minvertex, &mindeg))
+    {
+#ifdef VC_MAXDEG_DEBUG
+        fprintf(stdout, "[debug] found maximum degree vertex: %u has %u neighbors\n", vertex, maxdeg);
+#endif
+        if(k > 0)
+        {
+            /* if the graph consists of trees and cycles, we can solve it in polynomial time */
+            if(maxdeg <= 2)
+                solution_found = vc_tree_cycle(&graph, k);
+            else
+            {
+                subgraph_t subcopy;
+                
+                /* create the first branch: include 'vertex' */
+                subgraph_init_copy(&subcopy, &graph);
+                subgraph_remove_vertex(&subcopy, vertex);
+                solution_found = vc_maxdeg_recursive(&subcopy, k - 1);
+                subgraph_destroy(&subcopy);
+
+                /* create the second branch: include the neighborhood of 'vertex' */
+                if(!solution_found && (maxdeg <= k))
+                {
+                    subgraph_iter_t iter_neighborhood;
+                    vertex_t neighbor;
+                    
+                    subgraph_init_copy(&subcopy, &graph);
+                    subgraph_iter_neighborhood(&subcopy, &iter_neighborhood, vertex);
+                    while(subgraph_iter_next(&subcopy, &iter_neighborhood, &neighbor))
+                    {
+                        subgraph_remove_vertex(&subcopy, neighbor);
+                        k--;
+                    }
+
+                    subgraph_iter_destroy(&iter_neighborhood);
+                    subgraph_remove_vertex(&subcopy, vertex);
+                    
+                    solution_found = vc_maxdeg_recursive(&subcopy, k);
+                    subgraph_destroy(&subcopy);
+                }
+            }
+        }
     }
 
-    return true;
+    subgraph_destroy(&graph);
+    return solution_found;
 }
 
 bool vc_simple(const subgraph_t const *subgraph, int k)
