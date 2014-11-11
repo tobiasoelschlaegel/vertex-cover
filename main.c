@@ -41,11 +41,78 @@ bool find_uncovered_edge(const subgraph_t const *subgraph, const subgraph_t cons
     return edge_found;
 }
 
-bool vc_maxdeg(const subgraph_t const *subgraph, int k)
+bool find_maxdeg_vertex(const subgraph_t const *subgraph, vertex_t *u, int *maxdeg)
 {
-    bool solution_found = false;
+    vertex_t vertex;
+    subgraph_iter_t iter_vertices, iter_neighborhood;
+    *maxdeg = 0;
+    subgraph_iter_all_vertices(subgraph, &iter_vertices);
+    while(subgraph_iter_next(subgraph, &iter_vertices, &vertex))
+    {
+        int deg = 0;
+        vertex_t neighbor;
 
-    return solution_found;
+        subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+        while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+            deg++;
+
+        subgraph_iter_destroy(&iter_neighborhood);
+        if(deg > *maxdeg)
+        {
+            *maxdeg = deg;
+            *u = vertex;
+        }
+    }
+    subgraph_iter_destroy(&iter_vertices);
+    return (*maxdeg > 0);
+}
+
+bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
+{
+    vertex_t vertex;
+    int maxdeg;
+    
+    if(find_maxdeg_vertex(subgraph, &vertex, &maxdeg))
+    {
+#ifdef VC_MAXDEG_DEBUG
+        fprintf(stdout, "[debug] found maximum degree vertex: %u\n", vertex);
+#endif
+        if(k > 0)
+        {
+            bool solution_found = false;
+            subgraph_t subcopy;
+            /* first branch: include the vertex in the vertex cover */
+            subgraph_init_copy(&subcopy, subgraph);
+            subgraph_remove_vertex(&subcopy, vertex);
+            
+            solution_found = vc_maxdeg_recursive(&subcopy, k - 1);
+            if(!solution_found && (maxdeg <= k))
+            {
+                /* second branch: remove neighbors of the vertex */
+                subgraph_iter_t iter_neighborhood;
+                vertex_t neighbor;
+                
+                subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+                while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+                {
+                    subgraph_remove_vertex(&subcopy, neighbor);
+                    k--;
+                }
+
+                subgraph_iter_destroy(&iter_neighborhood);
+                
+                solution_found = vc_maxdeg_recursive(&subcopy, k);
+            }
+
+            subgraph_destroy(&subcopy);
+            
+            return solution_found;
+        }
+        else
+            return false;
+    }
+
+    return true;
 }
 
 bool vc_simple(const subgraph_t const *subgraph, int k)
@@ -133,7 +200,6 @@ int main(int argc, char **argv)
         fprintf(stdout, " Available algorithms:\n");
         fprintf(stdout, "  simple     chooses edges and branches on their endpoints\n");
         fprintf(stdout, "  maxdeg     chooses vertex of maximum degree\n");
-        fprintf(stdout, "  maxdegred  same as 'maxdeg' but also uses reduction rules\n");
         return 0;
     }
 
@@ -159,7 +225,7 @@ int main(int argc, char **argv)
     }
     else if(!strcmp(argv[3], "maxdeg"))
     {
-        if(vc_maxdeg(&subgraph, k))
+        if(vc_maxdeg_recursive(&subgraph, k))
             fprintf(stdout, "vc-maxdeg: YES\n");
         else
             fprintf(stdout, "vc-maxdeg: NO\n");
