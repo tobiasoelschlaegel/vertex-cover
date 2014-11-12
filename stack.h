@@ -37,6 +37,7 @@ bool stack_binsearch(stack_t *stack, int (*compar)(const void *, const void *), 
 bool stack_find_max(stack_t *stack, int (*compar)(const void *, const void *), void *result);
 bool stack_get_element(stack_t *stack, uint32_t position, void *result);
 void stack_remove_element(stack_t *stack, int (*compar)(const void *, const void *), void *data);
+void stack_remove_last(stack_t *stack);
 bool stack_contains(stack_t *stack, int (*compar)(const void *, const void *), void *data);
 void *stack_get_element_ptr(const stack_t const *stack, uint32_t position);
 

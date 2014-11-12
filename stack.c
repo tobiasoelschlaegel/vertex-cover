@@ -266,6 +266,18 @@ void stack_remove_element(stack_t *stack, int (*compar)(const void *, const void
 }
 
 /**
+ * @brief Removes the last element from the stack.
+ * @param stack Stack.
+ */
+void stack_remove_last(stack_t *stack)
+{
+    assert(stack);
+    
+    if(stack_height(stack) > 0)
+        stack->n = stack->n - 1;
+}
+
+/**
  * @brief Tests whether a stack contains a certain element.
  * @param stack Stack.
  * @param compar Function that compares two elements.

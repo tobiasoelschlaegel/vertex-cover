@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include "graph.h"
+#include "queue.h"
 
 //#define VC_SIMPLE_DEBUG
 //#define VC_MAXDEG_DEBUG
 
 /*
-    gcc -o vc -Wall -O2 main.c graph.c stack.c bitset.c union_find.c -std=c99
+    gcc -o vc -Wall -O2 main.c graph.c stack.c bitset.c union_find.c queue.c -std=c99
  */
 
 struct _vc_simple_state_s
@@ -143,6 +144,80 @@ bool vc_tree_cycle(subgraph_t *subgraph, int k)
     return (k >= 0);
 }
 
+void compute_discs(const subgraph_t const *subgraph, vertex_t root, int levels)
+{
+    int *distances = (int * ) malloc(sizeof(int) * subgraph_base_num_vertices(subgraph));
+    queue_t bfs_queue;
+    vertex_t vertex;
+    subgraph_t discs;
+
+    subgraph_init_induced(&discs, subgraph_get_base_graph(subgraph));
+
+    for(int i = 0; i < subgraph_base_num_vertices(subgraph); i++)
+        distances[i] = -1;
+
+    distances[root] = 0;
+
+    queue_init(&bfs_queue, sizeof(vertex_t));
+    queue_enqueue(&bfs_queue, &root);
+
+    while(queue_dequeue(&bfs_queue, &vertex))
+    {
+        subgraph_iter_t iter_neighborhood;
+        vertex_t neighbor;
+
+        subgraph_add_vertex(&discs, vertex);
+        fprintf(stdout, "[debug] vertex %u is on layer %i\n", vertex, distances[vertex]);
+
+        subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+        while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+        {
+            if(distances[neighbor] >= 0)
+                continue;
+
+            distances[neighbor] = distances[vertex] + 1;
+
+            if(distances[neighbor] <= levels)
+                queue_enqueue(&bfs_queue, &neighbor);
+        }
+        subgraph_iter_destroy(&iter_neighborhood);
+    }
+
+    subgraph_print(&discs);
+    subgraph_destroy(&discs);
+    queue_destroy(&bfs_queue);
+    free(distances);
+}
+
+void vc_buss_kernel(subgraph_t *subgraph, int *k)
+{
+    vertex_t maxvertex, minvertex;
+    int maxdeg, mindeg;
+
+    while((*k > 0) && find_minmaxdeg_vertex(subgraph, &maxvertex, &maxdeg, &minvertex, &mindeg))
+    {
+        subgraph_iter_t iter_neighborhood;
+        vertex_t neighbor;
+
+        if(mindeg == 1)
+        {
+            subgraph_iter_neighborhood(subgraph, &iter_neighborhood, minvertex);
+            subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor);
+            subgraph_iter_destroy(&iter_neighborhood);
+            subgraph_remove_vertex(subgraph, minvertex);
+            subgraph_remove_vertex(subgraph, neighbor);
+            (*k)--;
+        }
+        else if(maxdeg > *k)
+        {
+            subgraph_remove_vertex(subgraph, maxvertex);
+            (*k)--;
+        }
+        else
+            break;
+    }
+}
+
 bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
 {
     vertex_t vertex, minvertex;
@@ -152,6 +227,9 @@ bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
     
     subgraph_init_copy(&graph, subgraph);
     
+    /* kernelization: remove vertices of degree 1 or degree > k */
+    vc_buss_kernel(&graph, &k);
+
     if(find_minmaxdeg_vertex(&graph, &vertex, &maxdeg, &minvertex, &mindeg))
     {
 #ifdef VC_MAXDEG_DEBUG
@@ -195,6 +273,8 @@ bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
             }
         }
     }
+    else
+        solution_found = (k >= 0);
 
     subgraph_destroy(&graph);
     return solution_found;

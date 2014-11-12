@@ -218,25 +218,33 @@ bool subgraph_contains_vertex(const subgraph_t const *subgraph, vertex_t vertex)
 
 void subgraph_print(const subgraph_t const *subgraph)
 {
-    bool first = true;
     subgraph_iter_t iterator;
     vertex_t vertex;
     
+    fprintf(stdout, "--- subgraph ---\n");
     subgraph_iter_all_vertices(subgraph, &iterator);
     while(subgraph_iter_next(subgraph, &iterator, &vertex))
     {
-        if(first)
+        subgraph_iter_t iter_neighborhood;
+        vertex_t neighbor;
+        bool first = true;
+        
+        fprintf(stdout, "[vertex] %u: [", vertex);
+        subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+        while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
         {
-            first = false;
-            fprintf(stdout, "[%u", vertex);
+            if(first)
+            {
+                first = false;
+                fprintf(stdout, "%u", neighbor);
+            }
+            else
+                fprintf(stdout, ", %u", neighbor);
         }
-        else
-            fprintf(stdout, ", %u", vertex);
-    }
-    
-    if(!first)
+        subgraph_iter_destroy(&iter_neighborhood);
         fprintf(stdout, "]\n");
-    
+    }
+    fprintf(stdout, "---   end   ---\n");
     subgraph_iter_destroy(&iterator);
 }
 
