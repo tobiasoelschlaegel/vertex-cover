@@ -4,6 +4,7 @@
 
 //#define VC_SIMPLE_DEBUG
 //#define VC_MAXDEG_DEBUG
+//#define VC_DEGREE2_DEBUG
 
 /*
     gcc -o vc -Wall -O2 main.c graph.c stack.c bitset.c union_find.c queue.c -std=c99
@@ -213,6 +214,54 @@ void vc_buss_kernel(subgraph_t *subgraph, int *k)
             subgraph_remove_vertex(subgraph, maxvertex);
             (*k)--;
         }
+        else if(mindeg == 2)
+        {
+            bool found = false;
+            vertex_t vertex;
+            subgraph_iter_t iter_vertices;
+            
+            subgraph_iter_all_vertices(subgraph, &iter_vertices);
+            while((*k > 0) && subgraph_iter_next(subgraph, &iter_vertices, &vertex))
+            {
+                if(subgraph_degree(subgraph, vertex) == 2)
+                {
+                    vertex_t neighbor1, neighbor2, neighbor = 0;
+                    subgraph_iter_t iter_neighborhood;
+#ifdef VC_DEGREE2_DEBUG
+                    fprintf(stdout, "[debug] vertex %u has degree 2\n", vertex);
+#endif
+                    subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+                    subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor1);
+                    subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor2);
+                    subgraph_iter_destroy(&iter_neighborhood);
+
+                    /* check if neighbors are connected */
+                    subgraph_iter_neighborhood(subgraph, &iter_neighborhood, neighbor1);
+                    while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+                    {
+                        if(neighbor == neighbor2)
+                            break;
+                    }
+                    subgraph_iter_destroy(&iter_neighborhood);
+
+                    if(neighbor == neighbor2)
+                    {
+#ifdef VC_DEGREE2_DEBUG
+                        fprintf(stdout, "[debug] degree-2 vertex has two connected neighbors\n");
+#endif
+                        found = true;
+                        subgraph_remove_vertex(subgraph, vertex);
+                        subgraph_remove_vertex(subgraph, neighbor1);
+                        subgraph_remove_vertex(subgraph, neighbor2);
+                        (*k) = (*k) - 2;
+                    }
+                }
+            }
+            subgraph_iter_destroy(&iter_vertices);
+            
+            if(!found)
+                break;
+        }
         else
             break;
     }
@@ -240,6 +289,12 @@ bool vc_maxdeg_recursive(const subgraph_t const *subgraph, int k)
             /* if the graph consists of trees and cycles, we can solve it in polynomial time */
             if(maxdeg <= 2)
                 solution_found = vc_tree_cycle(&graph, k);
+            /*else if(maxdeg <= 8)
+            {
+                printf("maxvertex: %u, maxdeg: %u, %u vertices left\n", vertex, maxdeg, subgraph_num_vertices(&graph));
+                compute_discs(&graph, vertex, 4);
+                exit(0);
+            }*/
             else
             {
                 subgraph_t subcopy;

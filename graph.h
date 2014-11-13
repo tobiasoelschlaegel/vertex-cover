@@ -101,6 +101,7 @@ uint32_t subgraph_num_vertices(const subgraph_t const *subgraph);
 uint32_t subgraph_base_num_vertices(const subgraph_t const *subgraph);
 const graph_t *subgraph_get_base_graph(const subgraph_t const *subgraph);
 void subgraph_find_components(const subgraph_t const *subgraph, stack_t *components);
+uint32_t subgraph_degree(const subgraph_t const *subgraph, vertex_t vertex);
 
 void subgraph_iter_init_vertices(const subgraph_t const *subgraph, subgraph_iter_t *iterator);
 void subgraph_iter_all_vertices(const subgraph_t const *subgraph, subgraph_iter_t *iterator);

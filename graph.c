@@ -301,6 +301,20 @@ void subgraph_find_components(const subgraph_t const *subgraph, stack_t *compone
     stack_destroy(&stack_dfs);
 }
 
+uint32_t subgraph_degree(const subgraph_t const *subgraph, vertex_t vertex)
+{
+    subgraph_iter_t iter_neighborhood;
+    uint32_t degree = 0;
+    vertex_t neighbor;
+
+    subgraph_iter_neighborhood(subgraph, &iter_neighborhood, vertex);
+    while(subgraph_iter_next(subgraph, &iter_neighborhood, &neighbor))
+        degree++;
+
+    subgraph_iter_destroy(&iter_neighborhood);
+    return degree;
+}
+
 void subgraph_iter_init_vertices(const subgraph_t const *subgraph, subgraph_iter_t *iterator)
 {
     iterator->type = GRAPH_ITER_ALL_VERTICES;
